@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -78,8 +79,12 @@ WSGI_APPLICATION = 'questionnaire_backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'postgres',
+        'USER': 'postgres',
+        'PASSWORD': 'Hassan8488$@',
+        'HOST': 'db.ahnneaclpkspcdtoqzkp.supabase.co',
+        'PORT': '5432',
     }
 }
 
@@ -136,3 +141,7 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'h.sadiq@tsgfulfillment.com'
 EMAIL_HOST_PASSWORD = 'TsG_(aAiLLA)8488$#@'
 DEFAULT_FROM_EMAIL = 'h.sadiq@tsgfulfillment.com'
+
+# Media files (uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
