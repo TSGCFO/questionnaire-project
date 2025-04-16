@@ -133,14 +133,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = True  # For development; restrict for production
 
-# Email settings for Microsoft 365
+# Email configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.office365.com'
+EMAIL_HOST = 'smtp.office365.com'  # For Microsoft 365/Exchange Online
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'h.sadiq@tsgfulfillment.com'
-EMAIL_HOST_PASSWORD = 'TsG_(aAiLLA)8488$#@'
-DEFAULT_FROM_EMAIL = 'h.sadiq@tsgfulfillment.com'
+EMAIL_HOST_USER = 'info@tsgfulfillment.com'
+EMAIL_HOST_PASSWORD = 'Hassan8488$@'
+DEFAULT_FROM_EMAIL = 'info@tsgfulfillment.com'
 
 # Media files (uploads)
 MEDIA_URL = '/media/'

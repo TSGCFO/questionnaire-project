@@ -6,6 +6,10 @@ from .models import QuestionnaireSubmission
 from .serializers import SubmissionSerializer
 from django.core.mail import EmailMessage
 import json
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class SubmissionView(APIView):
     """
@@ -44,7 +48,7 @@ class SubmissionView(APIView):
             submission.save()
             
             # Prepare email with attachment
-            subject = f'New Questionnaire Submission: {submission.id}'
+            subject = f'New Questionnaire Submission from {email}: ID {submission.id}'
             body = f'A new questionnaire has been submitted.\n\n' \
                    f'From: {email}\n' \
                    f'Submission ID: {submission.id}\n' \
@@ -56,11 +60,22 @@ class SubmissionView(APIView):
             else:
                 body += 'The submitted data is:\n\n' + json.dumps(questionnaire_data, indent=2)
             
+            # List of all recipients
+            recipient_list = [
+                '32688c60.tsgfulfillment.com@ca.teams.ms',  # Sales - TSG Fulfillment Business development
+                'roger.gavinho@tsgfulfillment.com',
+                'navi@tsgfulfillment.com',
+                'ZeeKhan@tsgfulfillment.com',
+                'zeeshan@tsgfulfillment.com'
+            ]
+            
             # Create email message
             email_message = EmailMessage(
                 subject=subject,
                 body=body,
-                to=['h.sadiq@tsgfulfillment.com']
+                from_email='info@tsgfulfillment.com',
+                to=recipient_list,
+                reply_to=[email]  # Set reply-to as the customer's email
             )
             
             # Attach the file if we have it
@@ -70,6 +85,8 @@ class SubmissionView(APIView):
             # Send email
             email_message.send()
             
+            logger.info(f"Questionnaire submission {submission.id} from {email} processed successfully")
+            
             # Return success response
             return Response({
                 "message": "Submission successful",
@@ -77,6 +94,9 @@ class SubmissionView(APIView):
             }, status=status.HTTP_201_CREATED)
                 
         except Exception as e:
+            # Log the error for debugging
+            logger.error(f"Error processing questionnaire submission: {str(e)}")
+            
             # Return error message
             return Response({
                 "error": str(e)

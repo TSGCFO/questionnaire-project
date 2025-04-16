@@ -27,130 +27,117 @@ const QuestionnaireImporter = () => {
   const [message, setMessage] = useState({ show: false, text: '', severity: 'info' });
   
   /**
- * Handles form submission - sends data and file to API or stores for offline use
- */
-const handleSubmit = async () => {
-  // Validate form
-  if (!data) {
-    showMessage('Please import a questionnaire file first', 'warning');
-    return;
-  }
-  
-  if (!email || !email.includes('@')) {
-    showMessage('Please provide a valid email address', 'warning');
-    return;
-  }
-  
-  setLoading(true);
-  
-  try {
-    if (navigator.onLine) {
-      // Use FormData to handle file uploads - this is a special object 
-      // designed for sending forms with files through HTTP requests
-      const formData = new FormData();
+   * Handles file selection and Excel parsing
+   */
+  const handleFileChange = (event) => {
+    const selectedFile = event.target.files[0];
+    if (selectedFile) {
+      setFileName(selectedFile.name);
+      setFile(selectedFile);
       
-      // Add the email and questionnaire data to the form
-      formData.append('email', email);
-      
-      // Convert the JSON data to a string since FormData expects string or Blob values
-      formData.append('questionnaire_data', JSON.stringify(data));
-      
-      // Append the original Excel file if available
-      if (file) {
-        formData.append('file', file);
-      }
-      
-      // Send request with FormData - note the special headers needed for file uploads
-      const response = await axios.post(API_URL, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
+      // Create a FileReader to read the Excel file
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const binaryData = e.target.result;
+          
+          // Try parsing with more options for better compatibility
+          const workbook = XLSX.read(binaryData, { 
+            type: 'binary',
+            cellDates: true,
+            cellNF: false,
+            cellText: true
+          });
+          
+          // Get first worksheet
+          const wsname = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[wsname];
+          
+          // Convert to JSON with headers
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+            header: 1,
+            defval: '',
+            blankrows: false
+          });
+          
+          // Process the data using our improved function
+          const formattedData = processExcelData(jsonData);
+          
+          setData(formattedData);
+          showMessage('File imported successfully!', 'success');
+        } catch (error) {
+          console.error('Error processing Excel file:', error);
+          showMessage('Error processing file. Is this a valid Excel questionnaire?', 'error');
         }
-      });
+      };
       
-      showMessage('Questionnaire submitted successfully!', 'success');
-      clearForm();
-    } else {
-      // For offline mode, we can't effectively store binary files in localStorage
-      // so we'll just save the parsed data and notify the user
-      saveOfflineSubmission({
-        email: email,
-        questionnaire_data: data
-      });
+      reader.onerror = () => {
+        showMessage('Error reading file', 'error');
+      };
       
-      showMessage('You are offline. Your submission data has been saved and will be sent when you reconnect. Note: The original Excel file will not be included when submitted offline.', 'info');
-      clearForm();
+      reader.readAsBinaryString(selectedFile);
     }
-  } catch (error) {
-    console.error('Submission error:', error);
-    
-    // If API request failed, still try to save offline (without the file)
-    saveOfflineSubmission({
-      email: email,
-      questionnaire_data: data
+  };
+
+  /**
+   * Processes raw Excel data into a structured format with questions and answers
+   */
+  const processExcelData = (rawData) => {
+    // Skip empty rows
+    const nonEmptyRows = rawData.filter(row => {
+      if (!Array.isArray(row)) return false;
+      return row.some(cell => cell !== null && cell !== '');
     });
     
-    showMessage(`Error submitting questionnaire. Your submission has been saved and will be retried automatically (without the Excel file).`, 'warning');
-  } finally {
-    setLoading(false);
-  }
-};
-
- const processExcelData = (rawData) => {
-  // Skip empty rows
-  const nonEmptyRows = rawData.filter(row => {
-    if (!Array.isArray(row)) return false;
-    return row.some(cell => cell !== null && cell !== '');
-  });
-  
-  if (nonEmptyRows.length === 0) {
-    return [];
-  }
-  
-  // For questionnaire format, identify which columns contain questions and answers
-  let questionIndex = 0;  // Default to first column for questions
-  let answerIndex = 1;    // Default to second column for answers
-  
-  // Check if we need to adjust column indices based on content
-  if (nonEmptyRows.length > 0 && nonEmptyRows[0].length > 2) {
-    // Examine the first few rows to detect question/answer columns
-    for (let col = 0; col < nonEmptyRows[0].length; col++) {
-      // If we find a column header that suggests questions, use it
-      if (nonEmptyRows[0][col] && 
-          typeof nonEmptyRows[0][col] === 'string' &&
-          (nonEmptyRows[0][col].toLowerCase().includes('question') || 
-           nonEmptyRows[0][col].toLowerCase().includes('pick pack ship'))) {
-        questionIndex = col;
-        // Assume answer is in the next column
-        answerIndex = col + 1;
-        break;
+    if (nonEmptyRows.length === 0) {
+      return [];
+    }
+    
+    // For questionnaire format, identify which columns contain questions and answers
+    let questionIndex = 0;  // Default to first column for questions
+    let answerIndex = 1;    // Default to second column for answers
+    
+    // Check if we need to adjust column indices based on content
+    if (nonEmptyRows.length > 0 && nonEmptyRows[0].length > 2) {
+      // Examine the first few rows to detect question/answer columns
+      for (let col = 0; col < nonEmptyRows[0].length; col++) {
+        // If we find a column header that suggests questions, use it
+        if (nonEmptyRows[0][col] && 
+            typeof nonEmptyRows[0][col] === 'string' &&
+            (nonEmptyRows[0][col].toLowerCase().includes('question') || 
+             nonEmptyRows[0][col].toLowerCase().includes('pick pack ship'))) {
+          questionIndex = col;
+          // Assume answer is in the next column
+          answerIndex = col + 1;
+          break;
+        }
       }
     }
-  }
-  
-  const formattedData = [];
-  
-  // Process as a questionnaire
-  for (let i = 0; i < nonEmptyRows.length; i++) {
-    const row = nonEmptyRows[i];
     
-    // Skip if row doesn't have enough columns
-    if (row.length <= questionIndex) continue;
+    const formattedData = [];
     
-    const question = row[questionIndex];
-    // Check if this row has an answer column
-    const answer = row.length > answerIndex ? row[answerIndex] : '';
-    
-    // Only add rows with valid questions
-    if (question && typeof question === 'string' && question.trim()) {
-      formattedData.push({
-        question: question.trim(),
-        answer: typeof answer === 'string' ? answer.trim() : answer
-      });
+    // Process as a questionnaire
+    for (let i = 0; i < nonEmptyRows.length; i++) {
+      const row = nonEmptyRows[i];
+      
+      // Skip if row doesn't have enough columns
+      if (row.length <= questionIndex) continue;
+      
+      const question = row[questionIndex];
+      // Check if this row has an answer column
+      const answer = row.length > answerIndex ? row[answerIndex] : '';
+      
+      // Only add rows with valid questions
+      if (question && typeof question === 'string' && question.trim()) {
+        formattedData.push({
+          question: question.trim(),
+          answer: typeof answer === 'string' ? answer.trim() : answer
+        });
+      }
     }
-  }
-  
-  return formattedData;
-};
+    
+    return formattedData;
+  };
   
   /**
    * Displays a message to the user
@@ -171,7 +158,7 @@ const handleSubmit = async () => {
   };
   
   /**
-   * Handles form submission - sends data to API or stores for offline use
+   * Handles form submission - sends data and file to API or stores for offline use
    */
   const handleSubmit = async () => {
     // Validate form
@@ -187,32 +174,53 @@ const handleSubmit = async () => {
     
     setLoading(true);
     
-    // Prepare submission data
-    const submissionData = {
-      email: email,
-      questionnaire_data: data
-    };
-    
     try {
       if (navigator.onLine) {
-        // Online - send directly to API
-        const response = await axios.post(API_URL, submissionData);
+        // Use FormData to handle file uploads - this is a special object 
+        // designed for sending forms with files through HTTP requests
+        const formData = new FormData();
+        
+        // Add the email and questionnaire data to the form
+        formData.append('email', email);
+        
+        // Convert the JSON data to a string since FormData expects string or Blob values
+        formData.append('questionnaire_data', JSON.stringify(data));
+        
+        // Append the original Excel file if available
+        if (file) {
+          formData.append('file', file);
+        }
+        
+        // Send request with FormData - note the special headers needed for file uploads
+        const response = await axios.post(API_URL, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
         
         showMessage('Questionnaire submitted successfully!', 'success');
         clearForm();
       } else {
-        // Offline - save for later
-        saveOfflineSubmission(submissionData);
-        showMessage('You are offline. Your submission has been saved and will be sent automatically when you reconnect.', 'info');
+        // For offline mode, we can't effectively store binary files in localStorage
+        // so we'll just save the parsed data and notify the user
+        saveOfflineSubmission({
+          email: email,
+          questionnaire_data: data
+        });
+        
+        showMessage('You are offline. Your submission data has been saved and will be sent when you reconnect. Note: The original Excel file will not be included when submitted offline.', 'info');
         clearForm();
       }
     } catch (error) {
       console.error('Submission error:', error);
       
-      // If API request failed, still try to save offline
-      saveOfflineSubmission(submissionData);
+      // If API request failed, still try to save offline (without the file)
+      saveOfflineSubmission({
+        email: email,
+        questionnaire_data: data
+      });
       
-      showMessage(`Error submitting questionnaire. Your submission has been saved and will be retried automatically.`, 'warning');
+      showMessage(`Error submitting questionnaire. Your submission has been saved and will be retried automatically (without the Excel file).`, 'warning');
     } finally {
       setLoading(false);
     }
